@@ -515,6 +515,7 @@ run_check_rows() {
     check_end=$(date +%s%3N)
     echo "scale=3; ($check_end - $check_start) / 1000" | bc > "$RESULT_DIR/check_rows_time.txt"
 }
+
 # Run benchmark queries
 run_query() {
     local query_dir="${QUERY_DIR:-query/}"
@@ -642,6 +643,11 @@ run_query() {
 
         for ((t=1; t<=query_times; t++)); do
             echo "Query run ${query_name} on run $t"
+            if type -t should_clear_cache_for_run >/dev/null && should_clear_cache_for_run "$t"; then
+                if ! run_clear_cache_actions "$query_name" "$t"; then
+                    die "Failed to clear cache before query ${query_name} run ${t}"
+                fi
+            fi
             local start_time
             start_time=$(date +%s%3N)
             if engine_run_sql "${db}" "$sql_content"; then
@@ -995,6 +1001,16 @@ main() {
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
     profile="${profile:-${PROFILE:-false}}"
     plan="${plan:-${PLAN:-false}}"
+    clear_file_cache="${clear_file_cache:-${CLEAR_FILE_CACHE:-false}}"
+    clear_page_cache="${clear_page_cache:-${CLEAR_PAGE_CACHE:-false}}"
+    clear_sys_page_cache="${clear_sys_page_cache:-${CLEAR_SYS_PAGE_CACHE:-false}}"
+    clear_cache_scope="${clear_cache_scope:-${CLEAR_CACHE_SCOPE:-cold}}"
+    be_hosts="${be_hosts:-${BE_HOSTS:-}}"
+    be_http_port="${be_http_port:-${BE_HTTP_PORT:-8040}}"
+    be_brpc_port="${be_brpc_port:-${BE_BRPC_PORT:-8060}}"
+    clear_file_cache_max_size_gb="${clear_file_cache_max_size_gb:-${CLEAR_FILE_CACHE_MAX_SIZE_GB:-2}}"
+    clear_file_cache_timeout_min="${clear_file_cache_timeout_min:-${CLEAR_FILE_CACHE_TIMEOUT_MIN:-60}}"
+    clear_cache_ssh_user="${clear_cache_ssh_user:-${CLEAR_CACHE_SSH_USER:-root}}"
     vectordbbench="${vectordbbench:-false}"
 
     if [[ "${drop_database,,}" != "true" ]]; then
@@ -1009,10 +1025,46 @@ main() {
     if [[ "${plan,,}" != "true" ]]; then
         plan="false"
     fi
+
+    clear_cache_scope="${clear_cache_scope,,}"
+    [[ "${clear_file_cache,,}" != "true" ]] && clear_file_cache="false"
+    [[ "${clear_page_cache,,}" != "true" ]] && clear_page_cache="false"
+    [[ "${clear_sys_page_cache,,}" != "true" ]] && clear_sys_page_cache="false"
+
+    if [[ "${clear_file_cache:-false}" == "true" \
+        || "${clear_page_cache:-false}" == "true" \
+        || "${clear_sys_page_cache:-false}" == "true" ]]; then
+        if [[ "$clear_cache_scope" != "cold" && "$clear_cache_scope" != "every_run" ]]; then
+            die "Invalid clear_cache_scope: ${clear_cache_scope} (allowed: cold, every_run)"
+        fi
+        if [ -z "${be_hosts:-}" ]; then
+            die "clear_*_cache is enabled but be_hosts is empty (set BE_HOSTS=ip1,ip2,...)"
+        fi
+        if ! [[ "$be_http_port" =~ ^[0-9]+$ ]]; then
+            die "Invalid be_http_port: ${be_http_port}"
+        fi
+        if ! [[ "$be_brpc_port" =~ ^[0-9]+$ ]]; then
+            die "Invalid be_brpc_port: ${be_brpc_port}"
+        fi
+        if ! [[ "$clear_file_cache_max_size_gb" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            die "Invalid clear_file_cache_max_size_gb: ${clear_file_cache_max_size_gb}"
+        fi
+        if ! [[ "$clear_file_cache_timeout_min" =~ ^[0-9]+$ ]]; then
+            die "Invalid clear_file_cache_timeout_min: ${clear_file_cache_timeout_min}"
+        fi
+    fi
     
     # Load and initialize engine
     load_engine
     init_engine
+
+    if [[ "${clear_file_cache:-false}" == "true" \
+        || "${clear_page_cache:-false}" == "true" \
+        || "${clear_sys_page_cache:-false}" == "true" ]]; then
+        if ! type -t should_clear_cache_for_run >/dev/null || ! type -t run_clear_cache_actions >/dev/null; then
+            die "Cache clearing is not supported by engine: ${ENGINE_TYPE}"
+        fi
+    fi
     
     # Run benchmark workflow
     echo "Starting benchmark: $ENGINE_TYPE"
