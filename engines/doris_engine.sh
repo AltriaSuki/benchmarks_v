@@ -697,6 +697,14 @@ engine_load_data() {
             local status_output
             status_output=$(engine_check_load_status "$load_label")
 
+            # Fail fast when the load label cannot be found.
+            if [ -z "$(echo "$status_output" | tr -d '[:space:]')" ] || \
+               echo "$status_output" | grep -qi "Empty set"; then
+                echo "$status_output"
+                echo "ERROR: S3 load label not found: $load_label" >&2
+                return 1
+            fi
+
             if echo "$status_output" | grep -q "FINISHED"; then
                 echo "    S3 load completed successfully"
                 break
