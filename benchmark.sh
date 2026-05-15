@@ -984,6 +984,7 @@ main() {
     load_config
     load_storage_config
     jmeter="${jmeter:-false}"
+    vectordbbench="${vectordbbench:-false}"
     
     # Check framework dependencies (now that jmeter flag is known)
     check_dependencies
@@ -995,7 +996,6 @@ main() {
     analyze_type="${analyze_type:-${ANALYZE_TYPE:-analyze_full}}"
     query="${query:-false}"
     query_times="${query_times:-1}"
-    vectordbbench="${vectordbbench:-false}"
     db="${db:-}"
     drop_database="${drop_database:-${DROP_DATABASE:-false}}"
     clean_trash="${clean_trash:-${CLEAN_TRASH:-false}}"
@@ -1011,7 +1011,6 @@ main() {
     clear_file_cache_max_size_gb="${clear_file_cache_max_size_gb:-${CLEAR_FILE_CACHE_MAX_SIZE_GB:-2}}"
     clear_file_cache_timeout_min="${clear_file_cache_timeout_min:-${CLEAR_FILE_CACHE_TIMEOUT_MIN:-60}}"
     clear_cache_ssh_user="${clear_cache_ssh_user:-${CLEAR_CACHE_SSH_USER:-root}}"
-    vectordbbench="${vectordbbench:-false}"
 
     if [[ "${drop_database,,}" != "true" ]]; then
         drop_database="false"
